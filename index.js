@@ -1,60 +1,41 @@
-import makeWASocket, { useMultiFileAuthState } from "@adiwajshing/baileys";
-import qrcode from "qrcode-terminal";
+import { Telegraf } from "telegraf";
 import express from "express";
 
 const app = express();
 
-// keeps Render service alive
-app.get("/", (req, res) => {
-  res.send("Nexon WhatsApp Bot is running!");
+// Paste your **new token** here safely
+const BOT_TOKEN = process.env.BOT_TOKEN; // We'll set this in Render's Environment Variables
+const bot = new Telegraf(BOT_TOKEN);
+
+// --- TELEGRAM BOT LOGIC ---
+
+bot.start((ctx) => {
+  ctx.reply(
+    `👋 Welcome to Nexon Tutoring!\nType "menu" to see options.`
+  );
 });
 
-app.listen(3000, () => console.log("Web server started on port 3000"));
+bot.hears("hi", (ctx) => {
+  ctx.reply("Hi! How can I help you today?");
+});
 
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("./auth");
-  const sock = makeWASocket({
-    printQRInTerminal: false,
-    auth: state,
-  });
+bot.hears("menu", (ctx) => {
+  ctx.reply(
+    "📚 *Nexon Tutoring Menu*\n1) Book Lesson\n2) Pricing\n3) Subjects\n4) Contact Tutor",
+    { parse_mode: "Markdown" }
+  );
+});
 
-  // Show QR Code in terminal when deploying locally
-  sock.ev.on("connection.update", ({ qr, connection }) => {
-    if (qr) {
-      console.log("Scan this QR to connect:");
-      qrcode.generate(qr, { small: true });
-    }
-    if (connection === "open") {
-      console.log("WhatsApp bot connected!");
-    }
-    if (connection === "close") {
-      console.log("Connection closed, reconnecting...");
-      startBot();
-    }
-  });
+// You can add more commands like booking, subjects, or AI assistant here
 
-  sock.ev.on("creds.update", saveCreds);
+// --- EXPRESS SERVER (keeps Render service alive) ---
+app.get("/", (req, res) => res.send("Telegram Bot is running!"));
 
-  sock.ev.on("messages.upsert", async (msg) => {
-    const m = msg.messages[0];
-    if (!m.message) return;
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Express server running");
+  bot.launch(); // Launch the bot
+});
 
-    const sender = m.key.remoteJid;
-    const text = m.message.conversation || "";
-
-    console.log("User:", sender, "said:", text);
-
-    // SIMPLE BOT RESPONSES
-    if (text.toLowerCase() === "hi") {
-      await sock.sendMessage(sender, { text: "Hi! How can Nexon Tutoring help today?" });
-    }
-
-    if (text.toLowerCase() === "menu") {
-      await sock.sendMessage(sender, {
-        text: "📚 *Nexon Tutoring Menu*\n1) Book Lesson\n2) Pricing\n3) Subjects\n4) Help",
-      });
-    }
-  });
-}
-
-startBot();
+// Optional graceful shutdown
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
